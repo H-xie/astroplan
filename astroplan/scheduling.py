@@ -14,6 +14,7 @@ import numpy as np
 from astropy import units as u
 from astropy.time import Time
 from astropy.table import Table
+from rich.progress import Progress
 
 from .utils import time_grid_from_range, stride_array
 from .constraints import AltitudeConstraint
@@ -636,57 +637,65 @@ class SequentialScheduler(Scheduler):
                                               b.duration])
             b.observer = self.observer
         current_time = self.schedule.start_time
-        while (len(blocks) > 0) and (current_time < self.schedule.end_time):
-            # first compute the value of all the constraints for each block
-            # given the current starting time
-            block_transitions = []
-            block_constraint_results = []
-            for b in blocks:
-                # first figure out the transition
-                if len(self.schedule.observing_blocks) > 0:
-                    trans = self.transitioner(
-                        self.schedule.observing_blocks[-1], b, current_time, self.observer)
+
+        with Progress() as progress:
+            progress_duration=self.schedule.end_time-self.schedule.start_time
+            last_timestamp=self.schedule.start_time
+            # progress_duration is in unit of jd
+            task = progress.add_task(f'[gree]Sequential scheduling...', total=progress_duration.value)
+            while (len(blocks) > 0) and (current_time < self.schedule.end_time):
+                progress.update(task, advance=current_time.jd-last_timestamp.jd)
+                last_timestamp = current_time
+                # first compute the value of all the constraints for each block
+                # given the current starting time
+                block_transitions = []
+                block_constraint_results = []
+                for b in blocks:
+                    # first figure out the transition
+                    if len(self.schedule.observing_blocks) > 0:
+                        trans = self.transitioner(
+                            self.schedule.observing_blocks[-1], b, current_time, self.observer)
+                    else:
+                        trans = None
+                    block_transitions.append(trans)
+                    transition_time = 0*u.second if trans is None else trans.duration
+
+                    times = current_time + transition_time + b._duration_offsets
+
+                    # make sure it isn't in a pre-filled slot
+                    if (any((current_time < filled_times) & (filled_times < times[2])) or
+                            any(abs(pre_filled.T[0]-current_time) < 1*u.second)):
+                        block_constraint_results.append(0)
+
+                    else:
+                        constraint_res = []
+                        for constraint in b._all_constraints:
+                            constraint_res.append(constraint(
+                                self.observer, b.target, times))
+                        # take the product over all the constraints *and* times
+                        block_constraint_results.append(np.prod(constraint_res))
+
+                # now identify the block that's the best
+                bestblock_idx = np.argmax(block_constraint_results)
+
+                if block_constraint_results[bestblock_idx] == 0.:
+                    # if even the best is unobservable, we need a gap
+                    current_time += self.gap_time
                 else:
-                    trans = None
-                block_transitions.append(trans)
-                transition_time = 0*u.second if trans is None else trans.duration
+                    # If there's a best one that's observable, first get its transition
+                    trans = block_transitions.pop(bestblock_idx)
+                    if trans is not None:
+                        self.schedule.insert_slot(trans.start_time, trans)
+                        current_time += trans.duration
 
-                times = current_time + transition_time + b._duration_offsets
+                    # now assign the block itself times and add it to the schedule
+                    newb = blocks.pop(bestblock_idx)
+                    newb.start_time = current_time
+                    current_time += newb.duration
+                    newb.end_time = current_time
+                    newb.constraints_value = block_constraint_results[bestblock_idx]
 
-                # make sure it isn't in a pre-filled slot
-                if (any((current_time < filled_times) & (filled_times < times[2])) or
-                        any(abs(pre_filled.T[0]-current_time) < 1*u.second)):
-                    block_constraint_results.append(0)
-
-                else:
-                    constraint_res = []
-                    for constraint in b._all_constraints:
-                        constraint_res.append(constraint(
-                            self.observer, b.target, times))
-                    # take the product over all the constraints *and* times
-                    block_constraint_results.append(np.prod(constraint_res))
-
-            # now identify the block that's the best
-            bestblock_idx = np.argmax(block_constraint_results)
-
-            if block_constraint_results[bestblock_idx] == 0.:
-                # if even the best is unobservable, we need a gap
-                current_time += self.gap_time
-            else:
-                # If there's a best one that's observable, first get its transition
-                trans = block_transitions.pop(bestblock_idx)
-                if trans is not None:
-                    self.schedule.insert_slot(trans.start_time, trans)
-                    current_time += trans.duration
-
-                # now assign the block itself times and add it to the schedule
-                newb = blocks.pop(bestblock_idx)
-                newb.start_time = current_time
-                current_time += newb.duration
-                newb.end_time = current_time
-                newb.constraints_value = block_constraint_results[bestblock_idx]
-
-                self.schedule.insert_slot(newb.start_time, newb)
+                    self.schedule.insert_slot(newb.start_time, newb)
 
         return self.schedule
 
@@ -751,60 +760,65 @@ class PriorityScheduler(Scheduler):
         sorted_indices = np.argsort(_block_priorities)
 
         unscheduled_blocks = []
-        # Compute the optimal observation time in priority order
-        for i in sorted_indices:
-            b = blocks[i]
-            # Compute possible observing times by combining object constraints
-            # with the master open times mask
-            constraint_scores = score_array[i]
 
-            # Add up the applied constraints to prioritize the best blocks
-            # And then remove any times that are already scheduled
-            is_open_time = self._get_filled_indices(times)
-            constraint_scores[~is_open_time] = 0
+        # Add Progress Bar [H-XIE]
+        with Progress() as progress:
+            task = progress.add_task('[pink]Priority scheduling...', total=len(sorted_indices))
+            # Compute the optimal observation time in priority order
+            for i in sorted_indices:
+                progress.update(task, advance=1)
+                b = blocks[i]
+                # Compute possible observing times by combining object constraints
+                # with the master open times mask
+                constraint_scores = score_array[i]
 
-            # Select the most optimal time
+                # Add up the applied constraints to prioritize the best blocks
+                # And then remove any times that are already scheduled
+                is_open_time = self._get_filled_indices(times)
+                constraint_scores[~is_open_time] = 0
 
-            # calculate the number of time slots needed for this exposure
-            _stride_by = int(np.ceil(float(b.duration / time_resolution)))
+                # Select the most optimal time
 
-            # Stride the score arrays by that number
-            _strided_scores = stride_array(constraint_scores, _stride_by)
+                # calculate the number of time slots needed for this exposure
+                _stride_by = int(np.ceil(float(b.duration / time_resolution)))
 
-            # Collapse the sub-arrays
-            # (run them through scorekeeper again? Just add them?
-            # If there's a zero anywhere in there, def. have to skip)
-            good = np.all(_strided_scores > 1e-5, axis=1)
-            sum_scores = np.zeros(len(_strided_scores))
-            sum_scores[good] = np.sum(_strided_scores[good], axis=1)
+                # Stride the score arrays by that number
+                _strided_scores = stride_array(constraint_scores, _stride_by)
 
-            if np.all(constraint_scores == 0) or np.all(~good):
-                # No further calculation if no times meet the constraints
-                _is_scheduled = False
-            else:
-                # schedulable in principle, provided the transition
-                # does not prevent us from fitting it in.
-                # loop over valid times and see if it fits
-                # TODO: speed up by searching multiples of time resolution?
-                for idx in np.argsort(sum_scores)[::-1]:
-                    if sum_scores[idx] <= 0.0:
-                        # we've run through all optimal blocks
-                        _is_scheduled = False
-                        break
-                    try:
-                        start_time_idx = idx
-                        new_start_time = times[start_time_idx]
-                        # attempt to schedule block
-                        _is_scheduled = self.attempt_insert_block(b, new_start_time, start_time_idx)
-                        if _is_scheduled:
+                # Collapse the sub-arrays
+                # (run them through scorekeeper again? Just add them?
+                # If there's a zero anywhere in there, def. have to skip)
+                good = np.all(_strided_scores > 1e-5, axis=1)
+                sum_scores = np.zeros(len(_strided_scores))
+                sum_scores[good] = np.sum(_strided_scores[good], axis=1)
+
+                if np.all(constraint_scores == 0) or np.all(~good):
+                    # No further calculation if no times meet the constraints
+                    _is_scheduled = False
+                else:
+                    # schedulable in principle, provided the transition
+                    # does not prevent us from fitting it in.
+                    # loop over valid times and see if it fits
+                    # TODO: speed up by searching multiples of time resolution?
+                    for idx in np.argsort(sum_scores)[::-1]:
+                        if sum_scores[idx] <= 0.0:
+                            # we've run through all optimal blocks
+                            _is_scheduled = False
                             break
-                    except IndexError:
-                        # idx can extend past end of _strided_open_time
-                        _is_scheduled = False
-                        break
+                        try:
+                            start_time_idx = idx
+                            new_start_time = times[start_time_idx]
+                            # attempt to schedule block
+                            _is_scheduled = self.attempt_insert_block(b, new_start_time, start_time_idx)
+                            if _is_scheduled:
+                                break
+                        except IndexError:
+                            # idx can extend past end of _strided_open_time
+                            _is_scheduled = False
+                            break
 
-            if not _is_scheduled:
-                unscheduled_blocks.append(b)
+                if not _is_scheduled:
+                    unscheduled_blocks.append(b)
 
         return self.schedule
 
