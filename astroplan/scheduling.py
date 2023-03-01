@@ -700,7 +700,7 @@ class SequentialScheduler(Scheduler):
                     newb.constraints_value = block_constraint_results[bestblock_idx]
 
                     self.schedule.insert_slot(newb.start_time, newb)
-            progress.stop_task(task)
+        progress.remove_task(task)
 
         return self.schedule
 
@@ -825,7 +825,7 @@ class PriorityScheduler(Scheduler):
                 if not _is_scheduled:
                     unscheduled_blocks.append(b)
 
-            progress.stop_task(task)
+        progress.remove_task(task)
 
 
         return self.schedule
