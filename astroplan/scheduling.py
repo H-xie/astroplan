@@ -14,7 +14,7 @@ import numpy as np
 from astropy import units as u
 from astropy.time import Time
 from astropy.table import Table
-from rich.progress import Progress
+from rich.progress import Progress, TimeElapsedColumn
 
 from .utils import time_grid_from_range, stride_array
 from .constraints import AltitudeConstraint
@@ -24,6 +24,10 @@ __all__ = ['ObservingBlock', 'TransitionBlock', 'Schedule', 'Slot',
            'Scheduler', 'SequentialScheduler', 'PriorityScheduler',
            'Transitioner', 'Scorer']
 
+progress = Progress(
+    *Progress.get_default_columns(),
+    TimeElapsedColumn()
+)
 
 class ObservingBlock(object):
     """
@@ -638,7 +642,7 @@ class SequentialScheduler(Scheduler):
             b.observer = self.observer
         current_time = self.schedule.start_time
 
-        with Progress() as progress:
+        with progress:
             progress_duration=self.schedule.end_time-self.schedule.start_time
             last_timestamp=self.schedule.start_time
             # progress_duration is in unit of jd
@@ -696,6 +700,7 @@ class SequentialScheduler(Scheduler):
                     newb.constraints_value = block_constraint_results[bestblock_idx]
 
                     self.schedule.insert_slot(newb.start_time, newb)
+            progress.stop_task(task)
 
         return self.schedule
 
@@ -762,7 +767,7 @@ class PriorityScheduler(Scheduler):
         unscheduled_blocks = []
 
         # Add Progress Bar [H-XIE]
-        with Progress() as progress:
+        with progress:
             task = progress.add_task('[pink]Priority scheduling...', total=len(sorted_indices))
             # Compute the optimal observation time in priority order
             for i in sorted_indices:
@@ -819,6 +824,9 @@ class PriorityScheduler(Scheduler):
 
                 if not _is_scheduled:
                     unscheduled_blocks.append(b)
+
+            progress.stop_task(task)
+
 
         return self.schedule
 
