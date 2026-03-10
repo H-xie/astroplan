@@ -191,10 +191,11 @@ def plot_airmass(targets, observer, time, ax=None, style_kwargs=None,
             target_name = ''
 
         # Plot data (against timezone-offset time)
-        ax.plot_date(timetoplot.plot_date, masked_airmass, label=target_name, **style_kwargs)
+        ax.plot(timetoplot.plot_date, masked_airmass, label=target_name, **style_kwargs)
 
     # Format the time axis
     xlo, xhi = (timetoplot[0]), (timetoplot[-1])
+    ax.xaxis_date()
     ax.set_xlim([xlo.plot_date, xhi.plot_date])
     date_formatter = dates.DateFormatter('%H:%M')
     ax.xaxis.set_major_formatter(date_formatter)
@@ -397,9 +398,10 @@ def plot_altitude(targets, observer, time, ax=None, style_kwargs=None,
             target_name = ''
 
         # Plot data
-        ax.plot_date(time.plot_date, masked_altitude, label=target_name, **style_kwargs)
+        ax.plot(time.plot_date, masked_altitude, label=target_name, **style_kwargs)
 
     # Format the time axis
+    ax.xaxis_date()
     ax.set_xlim([time[0].plot_date, time[-1].plot_date])
     date_formatter = dates.DateFormatter('%H:%M')
     ax.xaxis.set_major_formatter(date_formatter)
@@ -619,9 +621,10 @@ def plot_parallactic(target, observer, time, ax=None, style_kwargs=None,
     style_kwargs.setdefault('label', target_name)
 
     # Plot data.
-    ax.plot_date(time.plot_date, p_angle, **style_kwargs)
+    ax.plot(time.plot_date, p_angle, **style_kwargs)
 
     # Format the time axis
+    ax.xaxis_date()
     date_formatter = dates.DateFormatter('%H:%M')
     ax.xaxis.set_major_formatter(date_formatter)
     plt.setp(ax.get_xticklabels(), rotation=30, ha='right')
