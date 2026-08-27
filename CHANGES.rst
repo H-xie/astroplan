@@ -9,9 +9,10 @@
   intermittently breaking the "Load tox environments" and wheel-building
   steps), ensure the coverage data file lands where the new Codecov upload
   step expects it, fix stale ``matplotlib.pyplot.plot_date`` docstring
-  references left over from the switch to ``matplotlib.pyplot.plot``, fix a
-  dead documentation link, and ignore ADS's bot-blocking 405 responses in the
-  linkcheck.
+  references left over from the switch to ``matplotlib.pyplot.plot``, fix the
+  now fully-removed ``Axes.plot_date`` call in the IERS FAQ's example plot,
+  fix a dead documentation link, and ignore ADS's bot-blocking 405 responses
+  in the linkcheck.
 
 0.10.1 (2024-08-13)
 -------------------
