@@ -90,7 +90,7 @@ def plot_airmass(targets, observer, time, ax=None, style_kwargs=None,
         If None, uses the current ``Axes``.
 
     style_kwargs : dict or None, optional.
-        A dictionary of keywords passed into `~matplotlib.pyplot.plot_date`
+        A dictionary of keywords passed into `~matplotlib.pyplot.plot`
         to set plotting styles.
 
     style_sheet : dict or `None` (optional)
@@ -319,7 +319,7 @@ def plot_altitude(targets, observer, time, ax=None, style_kwargs=None,
         If None, uses the current ``Axes``.
 
     style_kwargs : dict or None, optional.
-        A dictionary of keywords passed into `~matplotlib.pyplot.plot_date`
+        A dictionary of keywords passed into `~matplotlib.pyplot.plot`
         to set plotting styles.
 
     style_sheet : dict or `None` (optional)
@@ -567,7 +567,7 @@ def plot_parallactic(target, observer, time, ax=None, style_kwargs=None,
         If None, uses the current ``Axes``.
 
     style_kwargs : dict or None, optional.
-        A dictionary of keywords passed into `~matplotlib.pyplot.plot_date`
+        A dictionary of keywords passed into `~matplotlib.pyplot.plot`
         to set plotting styles.
 
     style_sheet : dict or `None` (optional)
