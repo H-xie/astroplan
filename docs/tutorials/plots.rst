@@ -13,7 +13,7 @@ of plots: airmass vs time, parallactic angle vs time and sky charts. This
 plotting functionality in `astroplan` requires `Matplotlib`_ (although non-
 plotting functionality will work even without `Matplotlib`_ ).  The use of
 additional plotting packages (like `Seaborn
-<http://stanford.edu/~mwaskom/software/seaborn/>`_) is not explicitly prevented,
+<https://seaborn.pydata.org/>`_) is not explicitly prevented,
 but may or may not actually work.
 
 All `astroplan` plots return a `~matplotlib.axes.Axes` object (which by
